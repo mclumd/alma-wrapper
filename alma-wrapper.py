@@ -12,7 +12,7 @@ import re
 #from actions import *
 
 ap = argparse.ArgumentParser()
-ap.add_argument("-a", "--alma", required=False, help="directory for ALMA")
+ap.add_argument("-a", "--alma", required=False, help="specify new directory for ALMA")
 args = vars(ap.parse_args())
 
 alma_dir = "./src/julia/alma/"
@@ -20,9 +20,6 @@ if args["alma"]:
   alma_dir = args["alma"]
 
 alma = subprocess.Popen(["./alma.x", "./demo/move.pl"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False, cwd=alma_dir)
-
-canDo = []
-next_action = None
 
 def main():
   #rospy.init_node('almabridge')
@@ -35,28 +32,30 @@ def main():
     output = alma.stdout.readline()
   sys.stdout.write("\n")
 
+  state = {}
+  state["action"] = None
+  state["canDo"] = []
   while True:
-    read_input()
+    read_input(state)
 
     alma_step() 
     alma_print()
     
-    read_KB()
-    agent_process()
-    send_output()
+    read_KB(state)
+    agent_process(state)
+    send_output(state)
 
     sys.stdout.write("\n")
     time.sleep(1)
 
 
 # Takes collected ROS input from Simulator-Wrapper, issues adds/deletes to ALMA based on
-def read_input():
+def read_input(state):
   # Currently feeds this without ROS, as simple start
-  global next_action
   input = ["empty(left)", "empty(right)", "empty(up)", "empty(down)"]
-  if next_action != None:
-    input.append("not(doing(" + next_action + "))")
-    next_action = None
+  if state["action"] != None:
+    input.append("not(doing(" + state["action"] + "))")
+    state["action"] = None
   for line in input:
     alma_add(line)
     sys.stdout.write(alma.stdout.readline())
@@ -64,9 +63,8 @@ def read_input():
 
 
 # Parse KB obtained from ALMA, updating data structures
-def read_KB():
-  global canDo
-  canDo = []
+def read_KB(state):
+  state["canDo"] = []
 
   regexp = re.compile("[0-9]+: canDo\((.*)\) \(parents.*$")
   output = alma.stdout.readline()
@@ -75,19 +73,18 @@ def read_KB():
 
     search = regexp.search(output)
     if search:
-      canDo.append(search.group(1))
+      state["canDo"].append(search.group(1))
 
     output = alma.stdout.readline()
 
 # Processes ALMA KB contents
 # Includes selection of action, if currently able to act
-def agent_process():
-  global next_action
-  if len(canDo) > 0:
-    pos = random.randint(0, len(canDo)-1)
-    for idx, action in enumerate(canDo):
+def agent_process(state):
+  if len(state["canDo"]) > 0:
+    pos = random.randint(0, len(state["canDo"])-1)
+    for idx, action in enumerate(state["canDo"]):
       if idx == pos:
-        next_action = action
+        state["action"] = action
         alma_update("canDo(" + action + ")", "doing(" + action + ")")
         sys.stdout.write(alma.stdout.readline())
       else:
@@ -96,8 +93,8 @@ def agent_process():
 
 
 # Pass ROS output to Simulator-Wrapper, especially chosen actions
-def send_output():
-  # TODO: pass along next_action
+def send_output(state):
+  # TODO: pass along next action
   return
 
 
