@@ -1,15 +1,14 @@
 #!/usr/bin/env python
 
 import subprocess
-#import rospy
+import rospy
 import sys
 import string
 import time
 import argparse
 import random
 import re
-#from std_msgs.msg import String
-#from actions import *
+from std_msgs.msg import String
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-a", "--alma", required=False, help="specify new directory for ALMA")
@@ -22,8 +21,12 @@ if args["alma"]:
 alma = subprocess.Popen(["./alma.x", "./demo/move.pl"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False, cwd=alma_dir)
 
 def main():
-  #rospy.init_node('almabridge')
-  #rospy.Subscriber("alma_in", String, add)
+  rospy.init_node('alma_wrapper')
+  #rospy.Subscriber("agent_input", String, )
+  state = {}
+  state["output_topic"] = rospy.Publisher("agent_output", String, queue_size=1)
+  state["action"] = None
+  state["canDo"] = []
 
   # Print initial KB, before beginning
   output = alma.stdout.readline()
@@ -32,9 +35,6 @@ def main():
     output = alma.stdout.readline()
   sys.stdout.write("\n")
 
-  state = {}
-  state["action"] = None
-  state["canDo"] = []
   while True:
     read_input(state)
 
@@ -46,14 +46,14 @@ def main():
     send_output(state)
 
     sys.stdout.write("\n")
-    time.sleep(1)
+    #time.sleep(1)
 
 
 # Takes collected ROS input from Simulator-Wrapper, issues adds/deletes to ALMA based on
 def read_input(state):
   # Currently feeds this without ROS, as simple start
   input = ["empty(left)", "empty(right)", "empty(up)", "empty(down)"]
-  if state["action"] != None:
+  if state["action"] is not None:
     input.append("not(doing(" + state["action"] + "))")
     state["action"] = None
   for line in input:
@@ -94,7 +94,8 @@ def agent_process(state):
 
 # Pass ROS output to Simulator-Wrapper, especially chosen actions
 def send_output(state):
-  # TODO: pass along next action
+  if state["action"] is not None:
+    state["output_topic"].publish(state["action"])
   return
 
 
