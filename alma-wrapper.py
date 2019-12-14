@@ -22,8 +22,9 @@ alma = subprocess.Popen(["./alma.x", "./demo/move.pl"], stdin=subprocess.PIPE, s
 
 def main():
   rospy.init_node('alma_wrapper')
-  #rospy.Subscriber("agent_input", String, )
   state = {}
+  state["input"] = [] # May need alternative thread-safe structure
+  rospy.Subscriber("agent_input", String, process_input, state["input"])
   state["output_topic"] = rospy.Publisher("agent_output", String, queue_size=1)
   state["action"] = None
   state["canDo"] = []
@@ -59,7 +60,6 @@ def read_input(state):
   for line in input:
     alma_add(line)
     sys.stdout.write(alma.stdout.readline())
-  return
 
 
 # Parse KB obtained from ALMA, updating data structures
@@ -96,8 +96,12 @@ def agent_process(state):
 def send_output(state):
   if state["action"] is not None:
     state["output_topic"].publish(state["action"])
-  return
 
+
+# Adds content from subscribed ROS topic to input buffer, for read_input to consume
+def process_input(data, args):
+  # TODO
+  return
 
 # Functions for issuing ALMA commands:
 
