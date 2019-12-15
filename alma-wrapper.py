@@ -8,6 +8,7 @@ import time
 import argparse
 import random
 import re
+from threading import Lock
 from std_msgs.msg import String
 
 ap = argparse.ArgumentParser()
@@ -19,11 +20,12 @@ if args["alma"]:
   alma_dir = args["alma"]
 
 alma = subprocess.Popen(["./alma.x", "./demo/move.pl"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False, cwd=alma_dir)
+lock = Lock()
 
 def main():
   rospy.init_node('alma_wrapper')
   state = {}
-  state["input"] = [] # May need alternative thread-safe structure
+  state["input"] = []
   rospy.Subscriber("agent_input", String, process_input, state["input"])
   state["output_topic"] = rospy.Publisher("agent_output", String, queue_size=1)
   state["action"] = None
@@ -47,24 +49,32 @@ def main():
     send_output(state)
 
     sys.stdout.write("\n")
-    #time.sleep(1)
+    time.sleep(1)
 
 
 # Takes collected ROS input from Simulator-Wrapper, issues adds/deletes to ALMA based on
 def read_input(state):
-  # Currently feeds this without ROS, as simple start
-  input = ["empty(left)", "empty(right)", "empty(up)", "empty(down)"]
-  if state["action"] is not None:
-    input.append("not(doing(" + state["action"] + "))")
-    state["action"] = None
-  for line in input:
+  # Currently feeds empty neighbors without ROS, as simple start
+  lock.acquire()
+  state["input"].append("empty(left)")
+  state["input"].append("empty(right)")
+  state["input"].append("empty(up)")
+  state["input"].append("empty(down)")
+  # Runs automatically without ROS input if following conditional is uncommented
+  #if state["action"] is not None:
+  #  state["input"].append("not(doing(" + state["action"] + "))")
+  for line in state["input"]:
     alma_add(line)
+    if line.startswith("not(doing("):
+      state["action"] = None
     sys.stdout.write(alma.stdout.readline())
+  del state["input"][:]
+  lock.release()
 
 
 # Parse KB obtained from ALMA, updating data structures
 def read_KB(state):
-  state["canDo"] = []
+  del state["canDo"][:]
 
   regexp = re.compile("[0-9]+: canDo\((.*)\) \(parents.*$")
   output = alma.stdout.readline()
@@ -99,8 +109,10 @@ def send_output(state):
 
 
 # Adds content from subscribed ROS topic to input buffer, for read_input to consume
-def process_input(data, args):
-  # TODO
+def process_input(msg, args):
+  lock.acquire()
+  args.append(msg.data)
+  lock.release()
   return
 
 # Functions for issuing ALMA commands:
